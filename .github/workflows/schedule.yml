@@ -1,23 +1,24 @@
-name: Ejecutar Bot Habitica
+name: Habitica Party Bot - Scheduled
 
 on:
   schedule:
-    # Se ejecuta cada 10 minutos de 9:00 a 9:50 UTC (1 hora)
-    # Formato: minuto hora día-del-mes mes día-de-la-semana
-    - cron: '*/10 9 * * *'
+    # Se ejecuta cada 10 minutos durante la hora 9 (UTC)
+    # 9:00, 9:10, 9:20, 9:30, 9:40, 9:50
+    - cron: '0,10,20,30,40,50 9 * * *'
   
-  # Para ejecutar manualmente desde la pestaña Actions
+  # Para ejecutar manualmente desde la interfaz de GitHub
   workflow_dispatch:
     inputs:
-      duration_minutes:
-        description: 'Duración en minutos (máx 30)'
+      test_mode:
+        description: 'Run in test mode (dry run)'
         required: false
-        default: '10'
+        type: boolean
+        default: false
 
 jobs:
   run-habitica-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Máximo 30 minutos por ejecución
+    timeout-minutes: 5  # Máximo 5 minutos por ejecución
     
     steps:
       - name: Checkout del código
@@ -30,58 +31,113 @@ jobs:
       
       - name: Verificar estructura del proyecto
         run: |
-          echo "Contenido del directorio:"
+          echo "📁 Contenido del directorio:"
           ls -la
-          echo "Archivo main.go existe?: $(ls main.go 2>/dev/null && echo 'SÍ' || echo 'NO')"
+          echo ""
+          echo "🔍 Verificando main.go..."
+          if [ -f "main.go" ]; then
+            echo "✅ main.go encontrado"
+            echo "📄 Primeras líneas de main.go:"
+            head -5 main.go
+          else
+            echo "❌ main.go NO encontrado"
+            exit 1
+          fi
+      
+      - name: Inicializar módulo Go (si no existe)
+        run: |
+          if [ ! -f go.mod ]; then
+            echo "📦 Inicializando módulo Go..."
+            go mod init habitica-party-up
+          fi
       
       - name: Descargar dependencias
         run: |
-          # Inicializar módulo Go si no existe
-          if [ ! -f go.mod ]; then
-            go mod init habitica-party-up
-          fi
+          echo "📥 Descargando dependencias..."
           go mod tidy
-          go get github.com/jasonlvhit/gocron@latest
+          echo "✅ Dependencias descargadas"
       
       - name: Compilar programa
         run: |
-          echo "Compilando..."
-          go build -o partyup .
-          ls -la partyup
-          echo "Compilación completada"
+          echo "🔨 Compilando programa..."
+          go build -o habitica-bot .
+          echo "✅ Programa compilado"
+          ls -lh habitica-bot
       
-      - name: Ejecutar bot con timeout
+      - name: Ejecutar bot (un solo ciclo)
         env:
           HABITICA_API_USER: ${{ secrets.HABITICA_API_USER }}
           HABITICA_API_KEY: ${{ secrets.HABITICA_API_KEY }}
           # Configuración del bot
-          MIN_LVL: 50
+          MIN_LVL: 0
           LANGUAGE: "en"
           ONLY_ACTIVE: "true"
-          FETCH_INTERVAL: "300"  # 5 minutos entre ejecuciones internas
-          RUN_DURATION: ${{ github.event.inputs.duration_minutes || '10' }}
+          FETCH_INTERVAL: "120"
         run: |
-          echo "=== INICIANDO BOT HABITICA ==="
-          echo "API User: ${HABITICA_API_USER:0:8}..."  # Solo mostrar primeros chars
-          echo "Duración configurada: ${RUN_DURATION} minutos"
-          echo "Fetch Interval: ${FETCH_INTERVAL}s"
+          echo "🚀 Iniciando Habitica Bot..."
+          echo "🕐 Fecha y hora: $(date)"
+          echo "👤 API User (primeros 8 chars): ${HABITICA_API_USER:0:8}..."
+          echo "⚙️ Configuración:"
+          echo "  - Nivel mínimo: $MIN_LVL"
+          echo "  - Idioma: $LANGUAGE"
+          echo "  - Solo activos: $ONLY_ACTIVE"
           
-          # Calcular tiempo de ejecución en segundos
-          DURATION_SECONDS=$((RUN_DURATION * 60))
+          # Verificar que las credenciales existen
+          if [ -z "$HABITICA_API_USER" ] || [ -z "$HABITICA_API_KEY" ]; then
+            echo "❌ ERROR: Credenciales no configuradas"
+            echo "Por favor, configura los secrets HABITICA_API_USER y HABITICA_API_KEY"
+            exit 1
+          fi
           
-          # Ejecutar con timeout
-          timeout ${DURATION_SECONDS} ./partyup \
+          # Ejecutar el bot en modo single-run
+          echo ""
+          echo "▶️ Ejecutando bot en modo single-run..."
+          
+          ./habitica-bot \
             -api-user "$HABITICA_API_USER" \
             -api-key "$HABITICA_API_KEY" \
             -min-lvl "$MIN_LVL" \
             -language "$LANGUAGE" \
             -only-active "$ONLY_ACTIVE" \
-            -fetch-interval "$FETCH_INTERVAL" || true
+            -fetch-interval "$FETCH_INTERVAL" \
+            -single-run true
           
-          echo "=== EJECUCIÓN COMPLETADA ==="
+          echo ""
+          echo "✅ Ejecución completada exitosamente"
+          echo "⏰ Próxima ejecución automática: en 10 minutos"
       
-      - name: Limpiar logs si hay error
-        if: failure()
+      - name: Limpiar binario
+        if: always()
         run: |
-          echo "Ejecución falló, limpiando posibles datos sensibles..."
-          # Aquí podrías agregar limpieza si es necesario
+          echo "🧹 Limpiando binario..."
+          rm -f habitica-bot
+          echo "✅ Limpieza completada"
+
+  # Job adicional para monitoreo (opcional)
+  monitor:
+    runs-on: ubuntu-latest
+    needs: run-habitica-bot
+    if: always()
+    steps:
+      - name: Reporte de ejecución
+        run: |
+          echo "📊 RESUMEN DE EJECUCIÓN"
+          echo "======================="
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Ejecución: ${{ github.run_id }}"
+          echo "Hora: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "Estado del job anterior: ${{ needs.run-habitica-bot.result }}"
+          
+          if [ "${{ needs.run-habitica-bot.result }}" = "success" ]; then
+            echo "✅ Bot ejecutado exitosamente"
+          else
+            echo "⚠️  Bot encontró problemas"
+          fi
+          
+          echo ""
+          echo "⏰ Próximas ejecuciones programadas:"
+          echo "  - En 10 minutos"
+          echo "  - En 20 minutos"
+          echo "  - En 30 minutos"
+          echo "  - En 40 minutos"
+          echo "  - En 50 minutos"

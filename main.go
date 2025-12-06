@@ -9,8 +9,6 @@ import (
 	"log"
 	"net/http"
 	"time"
-
-	"github.com/jasonlvhit/gocron"
 )
 
 type Response struct {
@@ -49,19 +47,22 @@ type InviteRequest struct {
 
 var apiUser string
 var apiKey string
-
 var minLvl int
 var fetchInterval uint64
 var language string
 var onlyActive bool
+var maxCycles int
+var singleRun bool
 
 func main() {
 	flag.StringVar(&apiUser, "api-user", "", "Habitica API user")
 	flag.StringVar(&apiKey, "api-key", "", "Habitica API key")
 	flag.IntVar(&minLvl, "min-lvl", 0, "Min level of users to invite to party. Default is 0.")
-    flag.Uint64Var(&fetchInterval, "fetch-interval", 120, "Interval for fetching users in seconds. Default is 120.")
+	flag.Uint64Var(&fetchInterval, "fetch-interval", 120, "Interval for fetching users in seconds. Default is 120.")
 	flag.StringVar(&language, "language", "", "Language of users to invite to party. Default is all languages.")
 	flag.BoolVar(&onlyActive, "only-active", false, "Only invite active users to party. Default is false.")
+	flag.IntVar(&maxCycles, "max-cycles", 1, "Number of cycles to run. Default is 1 (single run).")
+	flag.BoolVar(&singleRun, "single-run", false, "Run once and exit (overrides max-cycles). Default is false.")
 	flag.Parse()
 
 	if apiUser == "" || apiKey == "" {
@@ -69,14 +70,34 @@ func main() {
 	}
 
 	fmt.Println("Welcome to PartyUp! The script will now start fetching users and inviting them to party.")
-	fetchUsersAndInvite()
-	go executeCronJob()
-	time.Sleep(168 * time.Hour)
-}
-
-func executeCronJob() {
-	gocron.Every(fetchInterval).Second().Do(fetchUsersAndInvite)
-	<-gocron.Start()
+	
+	// Si single-run es true, ejecutar solo una vez
+	if singleRun {
+		fmt.Println("Single-run mode: Executing one cycle...")
+		fetchUsersAndInvite()
+		fmt.Println("Single-run completed. Exiting.")
+		return
+	}
+	
+	// Ejecutar en ciclos según maxCycles
+	if maxCycles <= 0 {
+		maxCycles = 1
+	}
+	
+	fmt.Printf("Running %d cycles with %d seconds interval...\n", maxCycles, fetchInterval)
+	
+	for i := 1; i <= maxCycles; i++ {
+		fmt.Printf("\n=== Cycle %d/%d ===\n", i, maxCycles)
+		fetchUsersAndInvite()
+		
+		// No esperar después del último ciclo
+		if i < maxCycles {
+			fmt.Printf("Waiting %d seconds for next cycle...\n", fetchInterval)
+			time.Sleep(time.Duration(fetchInterval) * time.Second)
+		}
+	}
+	
+	fmt.Printf("\nCompleted all %d cycles. Exiting.\n", maxCycles)
 }
 
 func fetchUsersAndInvite() {
@@ -121,18 +142,18 @@ func fetchUsersAndInvite() {
 		log.Fatal("Request failed, please check your API user and key.")
 	}
 
-	usersUuid := make([]string, len(response.User))
+	usersUuid := make([]string, 0)
 	for _, user := range response.User {
 		if isValidUser(user) {
 			usersUuid = append(usersUuid, user.Id)
 		}
 	}
 
-	usersUuid = removeEmptyStrings(usersUuid)
 	if len(usersUuid) != 0 {
+		fmt.Printf("Found %d valid users to invite.\n", len(usersUuid))
 		inviteUsers(habiticaClient, usersUuid)
 	} else {
-		log.Printf("No users to invite. Retry in %d seconds.", fetchInterval)
+		fmt.Println("No users to invite at this time.")
 	}
 }
 
@@ -172,7 +193,7 @@ func inviteUsers(client http.Client, uuids []string) {
 		log.Fatal(readErr)
 	}
 
-	log.Printf("All %d users invited! Relaunch in %d seconds.", len(uuids), fetchInterval)
+	fmt.Printf("Successfully invited %d users!\n", len(uuids))
 }
 
 func isValidUser(user User) bool {
@@ -197,14 +218,4 @@ func isValidUser(user User) bool {
 	}
 
 	return true
-}
-
-func removeEmptyStrings(input []string) []string {
-	var result []string
-	for _, str := range input {
-		if str != "" {
-			result = append(result, str)
-		}
-	}
-	return result
 }
