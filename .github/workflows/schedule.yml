@@ -1,0 +1,87 @@
+name: Ejecutar Bot Habitica
+
+on:
+  schedule:
+    # Se ejecuta cada 10 minutos de 9:00 a 9:50 UTC (1 hora)
+    # Formato: minuto hora día-del-mes mes día-de-la-semana
+    - cron: '*/10 9 * * *'
+  
+  # Para ejecutar manualmente desde la pestaña Actions
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: 'Duración en minutos (máx 30)'
+        required: false
+        default: '10'
+
+jobs:
+  run-habitica-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30  # Máximo 30 minutos por ejecución
+    
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+      
+      - name: Verificar estructura del proyecto
+        run: |
+          echo "Contenido del directorio:"
+          ls -la
+          echo "Archivo main.go existe?: $(ls main.go 2>/dev/null && echo 'SÍ' || echo 'NO')"
+      
+      - name: Descargar dependencias
+        run: |
+          # Inicializar módulo Go si no existe
+          if [ ! -f go.mod ]; then
+            go mod init habitica-party-up
+          fi
+          go mod tidy
+          go get github.com/jasonlvhit/gocron@latest
+      
+      - name: Compilar programa
+        run: |
+          echo "Compilando..."
+          go build -o partyup .
+          ls -la partyup
+          echo "Compilación completada"
+      
+      - name: Ejecutar bot con timeout
+        env:
+          HABITICA_API_USER: ${{ secrets.HABITICA_API_USER }}
+          HABITICA_API_KEY: ${{ secrets.HABITICA_API_KEY }}
+          # Configuración del bot
+          MIN_LVL: 50
+          LANGUAGE: "en"
+          ONLY_ACTIVE: "true"
+          FETCH_INTERVAL: "300"  # 5 minutos entre ejecuciones internas
+          RUN_DURATION: ${{ github.event.inputs.duration_minutes || '10' }}
+        run: |
+          echo "=== INICIANDO BOT HABITICA ==="
+          echo "API User: ${HABITICA_API_USER:0:8}..."  # Solo mostrar primeros chars
+          echo "Duración configurada: ${RUN_DURATION} minutos"
+          echo "Fetch Interval: ${FETCH_INTERVAL}s"
+          
+          # Calcular tiempo de ejecución en segundos
+          DURATION_SECONDS=$((RUN_DURATION * 60))
+          
+          # Ejecutar con timeout
+          timeout ${DURATION_SECONDS} ./partyup \
+            -api-user "$HABITICA_API_USER" \
+            -api-key "$HABITICA_API_KEY" \
+            -min-lvl "$MIN_LVL" \
+            -language "$LANGUAGE" \
+            -only-active "$ONLY_ACTIVE" \
+            -fetch-interval "$FETCH_INTERVAL" || true
+          
+          echo "=== EJECUCIÓN COMPLETADA ==="
+      
+      - name: Limpiar logs si hay error
+        if: failure()
+        run: |
+          echo "Ejecución falló, limpiando posibles datos sensibles..."
+          # Aquí podrías agregar limpieza si es necesario
