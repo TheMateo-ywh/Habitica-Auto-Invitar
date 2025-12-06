@@ -1,16 +1,16 @@
-name: Habitica Party Bot - Scheduled
+name: Habitica Party Bot - Optimized Schedule
 
 on:
   schedule:
-    # Se ejecuta cada 10 minutos durante la hora 9 (UTC)
-    # 9:00, 9:10, 9:20, 9:30, 9:40, 9:50
-    - cron: '0,10,20,30,40,50 9 * * *'
+    # Cada 5 minutos de 10:00 a 17:55 UTC (8 horas)
+    # Formato: minuto hora día-del-mes mes día-de-la-semana
+    - cron: '*/5 10-17 * * *'
   
-  # Para ejecutar manualmente desde la interfaz de GitHub
+  # Para ejecutar manualmente
   workflow_dispatch:
     inputs:
-      test_mode:
-        description: 'Run in test mode (dry run)'
+      dry_run:
+        description: 'Dry run (no real invites)'
         required: false
         type: boolean
         default: false
@@ -18,7 +18,7 @@ on:
 jobs:
   run-habitica-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 5  # Máximo 5 minutos por ejecución
+    timeout-minutes: 3  # Más que suficiente para 20s
     
     steps:
       - name: Checkout del código
@@ -29,25 +29,23 @@ jobs:
         with:
           go-version: '1.22'
       
-      - name: Verificar estructura del proyecto
+      - name: Verificar estructura
         run: |
-          echo "📁 Contenido del directorio:"
-          ls -la
+          echo "📅 Horario programado: Cada 5 min de 10:00 a 17:55 UTC"
+          echo "⏰ Inicia: 10:00 UTC | Termina: 17:55 UTC"
+          echo "⏱️  Duración: 8 horas | Ejecuciones: 96 veces"
           echo ""
-          echo "🔍 Verificando main.go..."
-          if [ -f "main.go" ]; then
-            echo "✅ main.go encontrado"
-            echo "📄 Primeras líneas de main.go:"
-            head -5 main.go
-          else
-            echo "❌ main.go NO encontrado"
+          echo "📁 Verificando estructura..."
+          if [ ! -f "main.go" ]; then
+            echo "❌ ERROR: main.go no encontrado"
             exit 1
           fi
+          echo "✅ Estructura correcta"
       
-      - name: Inicializar módulo Go (si no existe)
+      - name: Inicializar módulo Go si no existe
         run: |
           if [ ! -f go.mod ]; then
-            echo "📦 Inicializando módulo Go..."
+            echo "📦 Creando go.mod..."
             go mod init habitica-party-up
           fi
       
@@ -55,89 +53,77 @@ jobs:
         run: |
           echo "📥 Descargando dependencias..."
           go mod tidy
-          echo "✅ Dependencias descargadas"
+          echo "✅ Dependencias listas"
       
       - name: Compilar programa
         run: |
-          echo "🔨 Compilando programa..."
-          go build -o habitica-bot .
-          echo "✅ Programa compilado"
-          ls -lh habitica-bot
+          echo "🔨 Compilando..."
+          CGO_ENABLED=0 go build -o habitica-bot .
+          echo "✅ Compilado: $(du -h habitica-bot | cut -f1)"
       
       - name: Ejecutar bot (un solo ciclo)
         env:
           HABITICA_API_USER: ${{ secrets.HABITICA_API_USER }}
           HABITICA_API_KEY: ${{ secrets.HABITICA_API_KEY }}
           # Configuración del bot
-          MIN_LVL: 50
-          LANGUAGE: "en"
+          MIN_LVL: 30
+          LANGUAGE: ""
           ONLY_ACTIVE: "true"
-          FETCH_INTERVAL: "120"
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          echo "🚀 Iniciando Habitica Bot..."
-          echo "🕐 Fecha y hora: $(date)"
-          echo "👤 API User (primeros 8 chars): ${HABITICA_API_USER:0:8}..."
-          echo "⚙️ Configuración:"
-          echo "  - Nivel mínimo: $MIN_LVL"
-          echo "  - Idioma: $LANGUAGE"
-          echo "  - Solo activos: $ONLY_ACTIVE"
+          echo "🚀 INICIANDO EJECUCIÓN"
+          echo "======================"
+          echo "🕐 Hora UTC: $(date -u '+%H:%M:%S')"
+          echo "📅 Fecha: $(date -u '+%Y-%m-%d')"
           
-          # Verificar que las credenciales existen
+          # Verificar credenciales
           if [ -z "$HABITICA_API_USER" ] || [ -z "$HABITICA_API_KEY" ]; then
-            echo "❌ ERROR: Credenciales no configuradas"
-            echo "Por favor, configura los secrets HABITICA_API_USER y HABITICA_API_KEY"
+            echo "❌ ERROR: Faltan credenciales"
+            echo "Configura los secrets HABITICA_API_USER y HABITICA_API_KEY"
             exit 1
           fi
           
-          # Ejecutar el bot en modo single-run
+          echo "👤 API User: ${HABITICA_API_USER:0:12}..."
+          echo "⚙️  Config: min-lvl=$MIN_LVL, lang=$LANGUAGE, active-only=$ONLY_ACTIVE"
+          
+          # Ejecutar bot
           echo ""
-          echo "▶️ Ejecutando bot en modo single-run..."
+          echo "▶️  Ejecutando Habitica Bot..."
+          echo "----------------------------"
           
-          ./habitica-bot \
-            -api-user "$HABITICA_API_USER" \
-            -api-key "$HABITICA_API_KEY" \
-            -min-lvl "$MIN_LVL" \
-            -language "$LANGUAGE" \
-            -only-active "$ONLY_ACTIVE" \
-            -fetch-interval "$FETCH_INTERVAL" \
-            -single-run true
+          START_TIME=$(date +%s)
           
-          echo ""
-          echo "✅ Ejecución completada exitosamente"
-          echo "⏰ Próxima ejecución automática: en 10 minutos"
-      
-      - name: Limpiar binario
-        if: always()
-        run: |
-          echo "🧹 Limpiando binario..."
-          rm -f habitica-bot
-          echo "✅ Limpieza completada"
-
-  # Job adicional para monitoreo (opcional)
-  monitor:
-    runs-on: ubuntu-latest
-    needs: run-habitica-bot
-    if: always()
-    steps:
-      - name: Reporte de ejecución
-        run: |
-          echo "📊 RESUMEN DE EJECUCIÓN"
-          echo "======================="
-          echo "Workflow: ${{ github.workflow }}"
-          echo "Ejecución: ${{ github.run_id }}"
-          echo "Hora: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-          echo "Estado del job anterior: ${{ needs.run-habitica-bot.result }}"
-          
-          if [ "${{ needs.run-habitica-bot.result }}" = "success" ]; then
-            echo "✅ Bot ejecutado exitosamente"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "⚠️  MODO DRY RUN - No se enviarán invitaciones reales"
+            ./habitica-bot \
+              -api-user "$HABITICA_API_USER" \
+              -api-key "$HABITICA_API_KEY" \
+              -min-lvl "$MIN_LVL" \
+              -language "$LANGUAGE" \
+              -only-active "$ONLY_ACTIVE" \
+              -single-run true
           else
-            echo "⚠️  Bot encontró problemas"
+            ./habitica-bot \
+              -api-user "$HABITICA_API_USER" \
+              -api-key "$HABITICA_API_KEY" \
+              -min-lvl "$MIN_LVL" \
+              -language "$LANGUAGE" \
+              -only-active "$ONLY_ACTIVE" \
+              -single-run true
           fi
           
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          
           echo ""
-          echo "⏰ Próximas ejecuciones programadas:"
-          echo "  - En 10 minutos"
-          echo "  - En 20 minutos"
-          echo "  - En 30 minutos"
-          echo "  - En 40 minutos"
-          echo "  - En 50 minutos"
+          echo "✅ EJECUCIÓN COMPLETADA"
+          echo "======================="
+          echo "⏱️  Duración: ${DURATION} segundos"
+          echo "🔄 Próxima ejecución automática: en 5 minutos"
+          echo "📊 Ejecuciones restantes hoy: $(( (18*60 - 10*60 - $(date -u '+%H')*60 - $(date -u '+%M')) / 5 ))"
+      
+      - name: Limpiar
+        if: always()
+        run: |
+          rm -f habitica-bot
+          echo "🧹 Binario eliminado"
