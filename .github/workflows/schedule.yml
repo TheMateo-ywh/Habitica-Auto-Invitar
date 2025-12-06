@@ -69,7 +69,7 @@ jobs:
           HABITICA_API_USER: ${{ secrets.HABITICA_API_USER }}
           HABITICA_API_KEY: ${{ secrets.HABITICA_API_KEY }}
           # Configuración del bot
-          MIN_LVL: 0
+          MIN_LVL: 50
           LANGUAGE: "en"
           ONLY_ACTIVE: "true"
           FETCH_INTERVAL: "120"
