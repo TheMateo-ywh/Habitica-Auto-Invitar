@@ -120,7 +120,9 @@ jobs:
           echo "======================="
           echo "⏱️  Duración: ${DURATION} segundos"
           echo "🔄 Próxima ejecución automática: en 5 minutos"
-          echo "📊 Ejecuciones restantes hoy: $(( (18*60 - 10*60 - $(date -u '+%H')*60 - $(date -u '+%M')) / 5 ))"
+          
+          # Solo información básica
+          echo "📅 Horario programado: 10:00 - 17:55 UTC"
       
       - name: Limpiar
         if: always()
