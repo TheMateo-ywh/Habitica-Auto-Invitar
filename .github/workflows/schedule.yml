@@ -71,16 +71,14 @@ jobs:
           MIN_LVL: 30
           LANGUAGE: ""
           ONLY_ACTIVE: "true"
-          MAX_CYCLES: 6               # 6 ciclos por ejecución
-          FETCH_INTERVAL: 300         # 5 minutos (300 segundos) entre ciclos
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
           echo "🚀 INICIANDO EJECUCIÓN CON MÚLTIPLES CICLOS"
           echo "======================"
           echo "🕐 Hora UTC: $(date -u '+%H:%M:%S')"
           echo "📅 Fecha: $(date -u '+%Y-%m-%d')"
-          echo "🔄 Configuración: $MAX_CYCLES ciclos, intervalo de $FETCH_INTERVAL segundos"
-          echo "⏱️  Duración total estimada: ~$(( (MAX_CYCLES * 30) + ((MAX_CYCLES - 1) * FETCH_INTERVAL) )) segundos"
+          echo "🔄 Configuración: 6 ciclos, intervalo de 300 segundos (5 min)"
+          echo "⏱️  Duración total estimada: ~1680 segundos (28 min)"
           
           # Verificar credenciales
           if [ -z "$HABITICA_API_USER" ] || [ -z "$HABITICA_API_KEY" ]; then
@@ -94,30 +92,32 @@ jobs:
           
           # Ejecutar bot
           echo ""
-          echo "▶️  Ejecutando Habitica Bot con $MAX_CYCLES ciclos..."
+          echo "▶️  Ejecutando Habitica Bot con 6 ciclos..."
           echo "--------------------------------------------------"
           
           START_TIME=$(date +%s)
           
           if [ "$DRY_RUN" = "true" ]; then
             echo "⚠️  MODO DRY RUN - No se enviarán invitaciones reales"
+            # Valores FIJOS directamente en los flags
             ./habitica-bot \
               -api-user "$HABITICA_API_USER" \
               -api-key "$HABITICA_API_KEY" \
               -min-lvl "$MIN_LVL" \
               -language "$LANGUAGE" \
               -only-active "$ONLY_ACTIVE" \
-              -max-cycles "$MAX_CYCLES" \
-              -fetch-interval "$FETCH_INTERVAL"
+              -max-cycles 6 \
+              -fetch-interval 300
           else
+            # Valores FIJOS directamente en los flags
             ./habitica-bot \
               -api-user "$HABITICA_API_USER" \
               -api-key "$HABITICA_API_KEY" \
               -min-lvl "$MIN_LVL" \
               -language "$LANGUAGE" \
               -only-active "$ONLY_ACTIVE" \
-              -max-cycles "$MAX_CYCLES" \
-              -fetch-interval "$FETCH_INTERVAL"
+              -max-cycles 6 \
+              -fetch-interval 300
           fi
           
           END_TIME=$(date +%s)
@@ -127,7 +127,6 @@ jobs:
           echo "✅ EJECUCIÓN COMPLETADA"
           echo "======================="
           echo "⏱️  Duración total: ${DURATION} segundos"
-          echo "📊 Ciclos completados: $MAX_CYCLES"
           echo "🔄 Próxima ejecución automática: en 30 minutos"
           echo "📅 Horario programado: Cada 30 minutos (24/7)"
       
