@@ -1,10 +1,10 @@
-name: Habitica Party Bot - Optimized Schedule
+name: Habitica Party Bot - 6 Ciclos por Ejecución
 
 on:
   schedule:
-    # Cada 5 minutos de 10:00 a 17:55 UTC (8 horas)
+    # Ejecuta cada 30 minutos, todo el día, todos los días.
     # Formato: minuto hora día-del-mes mes día-de-la-semana
-    - cron: '*/5 10-17 * * *'
+    - cron: '*/30 * * * *'
   
   # Para ejecutar manualmente
   workflow_dispatch:
@@ -18,7 +18,8 @@ on:
 jobs:
   run-habitica-bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 3  # Más que suficiente para 20s
+    # Aumentamos el timeout porque cada ejecución durará ~28 minutos
+    timeout-minutes: 40
     
     steps:
       - name: Checkout del código
@@ -31,9 +32,10 @@ jobs:
       
       - name: Verificar estructura
         run: |
-          echo "📅 Horario programado: Cada 5 min de 10:00 a 17:55 UTC"
-          echo "⏰ Inicia: 10:00 UTC | Termina: 17:55 UTC"
-          echo "⏱️  Duración: 8 horas | Ejecuciones: 96 veces"
+          echo "📅 Horario programado: Cada 30 minutos, continuo."
+          echo "🔄 Frecuencia: 48 ejecuciones/día (cada 30 min)"
+          echo "⚙️  Configuración interna: 6 ciclos con 5 min de intervalo"
+          echo "⏱️  Duración estimada por job: ~28-30 minutos"
           echo ""
           echo "📁 Verificando estructura..."
           if [ ! -f "main.go" ]; then
@@ -61,7 +63,7 @@ jobs:
           CGO_ENABLED=0 go build -o habitica-bot .
           echo "✅ Compilado: $(du -h habitica-bot | cut -f1)"
       
-      - name: Ejecutar bot (un solo ciclo)
+      - name: Ejecutar bot (6 ciclos con intervalo)
         env:
           HABITICA_API_USER: ${{ secrets.HABITICA_API_USER }}
           HABITICA_API_KEY: ${{ secrets.HABITICA_API_KEY }}
@@ -69,12 +71,16 @@ jobs:
           MIN_LVL: 30
           LANGUAGE: ""
           ONLY_ACTIVE: "true"
+          MAX_CYCLES: 6               # 6 ciclos por ejecución
+          FETCH_INTERVAL: 300         # 5 minutos (300 segundos) entre ciclos
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          echo "🚀 INICIANDO EJECUCIÓN"
+          echo "🚀 INICIANDO EJECUCIÓN CON MÚLTIPLES CICLOS"
           echo "======================"
           echo "🕐 Hora UTC: $(date -u '+%H:%M:%S')"
           echo "📅 Fecha: $(date -u '+%Y-%m-%d')"
+          echo "🔄 Configuración: $MAX_CYCLES ciclos, intervalo de $FETCH_INTERVAL segundos"
+          echo "⏱️  Duración total estimada: ~$(( (MAX_CYCLES * 30) + ((MAX_CYCLES - 1) * FETCH_INTERVAL) )) segundos"
           
           # Verificar credenciales
           if [ -z "$HABITICA_API_USER" ] || [ -z "$HABITICA_API_KEY" ]; then
@@ -88,8 +94,8 @@ jobs:
           
           # Ejecutar bot
           echo ""
-          echo "▶️  Ejecutando Habitica Bot..."
-          echo "----------------------------"
+          echo "▶️  Ejecutando Habitica Bot con $MAX_CYCLES ciclos..."
+          echo "--------------------------------------------------"
           
           START_TIME=$(date +%s)
           
@@ -101,7 +107,8 @@ jobs:
               -min-lvl "$MIN_LVL" \
               -language "$LANGUAGE" \
               -only-active "$ONLY_ACTIVE" \
-              -single-run true
+              -max-cycles "$MAX_CYCLES" \
+              -fetch-interval "$FETCH_INTERVAL"
           else
             ./habitica-bot \
               -api-user "$HABITICA_API_USER" \
@@ -109,7 +116,8 @@ jobs:
               -min-lvl "$MIN_LVL" \
               -language "$LANGUAGE" \
               -only-active "$ONLY_ACTIVE" \
-              -single-run true
+              -max-cycles "$MAX_CYCLES" \
+              -fetch-interval "$FETCH_INTERVAL"
           fi
           
           END_TIME=$(date +%s)
@@ -118,11 +126,10 @@ jobs:
           echo ""
           echo "✅ EJECUCIÓN COMPLETADA"
           echo "======================="
-          echo "⏱️  Duración: ${DURATION} segundos"
-          echo "🔄 Próxima ejecución automática: en 5 minutos"
-          
-          # Solo información básica
-          echo "📅 Horario programado: 10:00 - 17:55 UTC"
+          echo "⏱️  Duración total: ${DURATION} segundos"
+          echo "📊 Ciclos completados: $MAX_CYCLES"
+          echo "🔄 Próxima ejecución automática: en 30 minutos"
+          echo "📅 Horario programado: Cada 30 minutos (24/7)"
       
       - name: Limpiar
         if: always()
