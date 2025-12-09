@@ -65,7 +65,7 @@ jobs:
           HABITICA_API_KEY: ${{ secrets.HABITICA_API_KEY }}
           # Configuración del bot
           MIN_LVL: 30
-          LANGUAGE: ""
+          LANGUAGE: "en"
           ONLY_ACTIVE: "true"
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
