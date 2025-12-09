@@ -40,6 +40,87 @@ jobs:
           fi
           echo "✅ Estructura correcta"
       
-      # ... (Los pasos restantes de "Inicializar módulo Go", "Descargar dependencias", 
-      # "Compilar programa", "Ejecutar bot" y "Limpiar" permanecen **exactamente igual**)
-      # Solo asegúrate de que el comando final use `-single-run true`.
+      - name: Inicializar módulo Go si no existe
+        run: |
+          if [ ! -f go.mod ]; then
+            echo "📦 Creando go.mod..."
+            go mod init habitica-party-up
+          fi
+      
+      - name: Descargar dependencias
+        run: |
+          echo "📥 Descargando dependencias..."
+          go mod tidy
+          echo "✅ Dependencias listas"
+      
+      - name: Compilar programa
+        run: |
+          echo "🔨 Compilando..."
+          CGO_ENABLED=0 go build -o habitica-bot .
+          echo "✅ Compilado: $(du -h habitica-bot | cut -f1)"
+      
+      - name: Ejecutar bot (un solo ciclo)
+        env:
+          HABITICA_API_USER: ${{ secrets.HABITICA_API_USER }}
+          HABITICA_API_KEY: ${{ secrets.HABITICA_API_KEY }}
+          # Configuración del bot
+          MIN_LVL: 30
+          LANGUAGE: ""
+          ONLY_ACTIVE: "true"
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          echo "🚀 INICIANDO EJECUCIÓN"
+          echo "======================"
+          echo "🕐 Hora UTC: $(date -u '+%H:%M:%S')"
+          echo "📅 Fecha: $(date -u '+%Y-%m-%d')"
+          
+          # Verificar credenciales
+          if [ -z "$HABITICA_API_USER" ] || [ -z "$HABITICA_API_KEY" ]; then
+            echo "❌ ERROR: Faltan credenciales"
+            echo "Configura los secrets HABITICA_API_USER y HABITICA_API_KEY"
+            exit 1
+          fi
+          
+          echo "👤 API User: ${HABITICA_API_USER:0:12}..."
+          echo "⚙️  Config: min-lvl=$MIN_LVL, lang=$LANGUAGE, active-only=$ONLY_ACTIVE"
+          
+          # Ejecutar bot
+          echo ""
+          echo "▶️  Ejecutando Habitica Bot..."
+          echo "----------------------------"
+          
+          START_TIME=$(date +%s)
+          
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "⚠️  MODO DRY RUN - No se enviarán invitaciones reales"
+            ./habitica-bot \
+              -api-user "$HABITICA_API_USER" \
+              -api-key "$HABITICA_API_KEY" \
+              -min-lvl "$MIN_LVL" \
+              -language "$LANGUAGE" \
+              -only-active "$ONLY_ACTIVE" \
+              -single-run true
+          else
+            ./habitica-bot \
+              -api-user "$HABITICA_API_USER" \
+              -api-key "$HABITICA_API_KEY" \
+              -min-lvl "$MIN_LVL" \
+              -language "$LANGUAGE" \
+              -only-active "$ONLY_ACTIVE" \
+              -single-run true
+          fi
+          
+          END_TIME=$(date +%s)
+          DURATION=$((END_TIME - START_TIME))
+          
+          echo ""
+          echo "✅ EJECUCIÓN COMPLETADA"
+          echo "======================="
+          echo "⏱️  Duración: ${DURATION} segundos"
+          echo "🔄 Próxima ejecución automática: en 5 minutos"
+      
+      - name: Limpiar
+        if: always()
+        run: |
+          rm -f habitica-bot
+          echo "🧹 Binario eliminado"
