@@ -2,9 +2,9 @@ name: Habitica Party Bot - Continuous Schedule
 
 on:
   schedule:
-    # Ejecuta cada 5 minutos, todo el día, todos los días.
+    # Ejecuta cada 5 minutos, de 8 a 20 utc, todos los días.
     # Formato: minuto hora día-del-mes mes día-de-la-semana
-    - cron: '*/5 * * * *'
+    - cron: '*/5 8-20 * * *'
   
   # Para ejecutar manualmente
   workflow_dispatch:
