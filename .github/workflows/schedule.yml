@@ -1,5 +1,6 @@
 name: Habitica Party Bot - Continuous Schedule
 
+disabled: true
 on:
   schedule:
     # Ejecuta cada 5 minutos, de 8 a 20 utc, todos los días.
